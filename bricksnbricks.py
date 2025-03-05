@@ -6,12 +6,11 @@ import argparse
 import numpy as np
 import pandas as pd
 
-from utils import load_image, segment_objects, template_matching
+from utils import load_image, segment_objects, template_matching, EMOJI_ICONS
 
 
 class Board:
-    def __init__(self, board, cluster, gamename):
-        self.gamename = gamename
+    def __init__(self, board, cluster):
         self.board = board
         self.m, self.n = board.shape
         self.clusters = dict(
@@ -56,7 +55,7 @@ class Board:
 
             print()  
 
-    def play(self):
+    def play(self, save_path=None, gamename=None):
         """
         Example usage of explicit input validation without try/except.
         """
@@ -99,10 +98,12 @@ class Board:
             self.dst_idx = self.dst[0] * self.n + self.dst[1]
             self._update_direction()
 
+        assert save_path is not None 
+        assert gamename is not None
         history_to_save = pd.DataFrame({"src": self.src_history, "action": self.action_history})
         history_to_save['src'] = history_to_save['src'].apply(lambda x: json.dumps(x.tolist()))
         history_to_save['action'] = history_to_save['action'].apply(lambda x: json.dumps(x.tolist()))
-        history_to_save.to_csv(f"{self.gamename}_history.csv", index=False)
+        history_to_save.to_csv(f"{save_path}/{gamename}_history.csv", index=False)
 
     def resume(self, history):
         moves = pd.read_csv(history)
@@ -193,20 +194,23 @@ class Board:
 
         return None
 
-    def _process_move(self):
+    def _process_move(self, verbose=1):
         """
         Check if the move is valid and returns the coordinates of the icons to be removed
         """
         if self.board[*self.dst] == self.cur_label and np.abs(self.action.sum()) == 1:
             if self.board[*self.src] == self.board[*self.dst]:
-                print("direct removal")
+                if verbose == 1:
+                    print("direct removal") 
                 self._remove_icons([(self.src, self.src_idx), (self.dst, self.dst_idx)])
                 self.board[*self.src] = 0
                 self.board[*self.dst] = 0
             else:
-                print("invalid move")
+                if verbose == 1:
+                    print("invalid move")
         else:
-            print("no direct removal")
+            if verbose == 1:
+                print("no direct removal")
             neighbours = self._get_all_neighbours()
             immediate_neighbour_coord = self._get_closest_coords(self.src)[
                 self.direction_idx
@@ -262,10 +266,12 @@ class Board:
                     )
                 else:
                     self.temp_board = self.board.copy()
-                    print("invalid move")
+                    if verbose == 1:
+                        print("invalid move")
             else:
                 self.temp_board = self.board.copy()
-                print("invalid move")
+                if verbose == 1:
+                    print("invalid move")
 
     def _get_all_neighbours(self):
         """
@@ -418,52 +424,16 @@ if __name__ == "__main__":
     board = np.array(labels)
     cluster_icon_imgs = {label: icons[idx[0]] for label, idx in clusters.items()}
 
-    EMOJI_ICONS = {
-        1: "🚔",
-        2: "🚗",
-        3: "🚕",
-        4: "🚙",
-        5: "🚎",
-        6: "🚑",
-        7: "🚓",
-        8: "🛺",
-        9: "🚛",
-        10: "🚜",  # Transportation
-        11: "🐶",
-        12: "🐱",
-        13: "🐻",
-        14: "🐸",
-        15: "🐨",
-        16: "🦁",
-        17: "🐯",
-        18: "🐷",
-        19: "🐼",
-        20: "🐵",  # Animals
-        21: "🌳",
-        22: "🌸",
-        23: "🏀",
-        24: "⚽",
-        25: "🎮",
-        26: "⏰",
-        27: "💽",
-        28: "📸",
-        29: "🛵",
-        30: "🛶",
-        31: "⛵",
-        32: "🧿",  # Objects
-        33: "🍎",
-        34: "🍉",
-        35: "🍊",
-        36: "🍓",
-        37: "🍒",
-        38: "🍍",
-        39: "🥝",
-        40: "🍌",
-        41: "🥑",
-        42: "🥭",  # Fruits
-    }
+    cache_path = f"./.cache/{gamename}"
+    os.makedirs(cache_path, exist_ok=True)
 
-    b = Board(board, clusters, gamename)
+    import pickle
+    with open(f"{cache_path}/{gamename}_board.pkl", "wb") as f:
+        pickle.dump(board, f)
+    with open(f"{cache_path}/{gamename}_clusters.pkl", "wb") as f:
+        pickle.dump(clusters, f)
+
+    b = Board(board, clusters)
     if args.resume:
         b.resume(args.history)
-    b.play()
+    b.play(save_path=cache_path, gamename=gamename)
