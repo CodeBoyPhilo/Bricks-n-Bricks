@@ -2,3 +2,6 @@
 __pycache__
 .DS_Store
 .cache
+tests/test1/solution_solver.csv
+tests/test2/solution_solver.csv
+tests/test3/solution_solver.csv

@@ -1,14 +1,17 @@
+import argparse
+import json
+import os
+import pdb
+import typing
+import pickle
+import re
+import time
+
 import numpy as np
 import pandas as pd
-import pickle
-import os
-import re
-import pdb
-import json
-import argparse
-from components import Board, Tile, Boundary, Blank
-from utils import load_image, segment_objects, template_matching, EMOJI_ICONS
-import time
+
+from components import Blank, Board, Boundary, Tile
+from utils import EMOJI_ICONS, load_image, segment_objects, template_matching
 
 
 class BricksNBricks:
@@ -18,11 +21,11 @@ class BricksNBricks:
             "up": (-1, 0),
             "down": (1, 0),
             "left": (0, -1),
-            "right": (0, 1)
+            "right": (0, 1),
         }
-        
+
         self.DIRECTIONS_ARRAY = [list(d) for d in self.DIRECTIONS_DICT.values()]
-        self.direction:str = None
+        self.direction: str = None
         self.direction_idx = None
         self.src: np.array = None
         self.src_idx: int = None
@@ -32,7 +35,7 @@ class BricksNBricks:
         self.cur_label: int = None
         self.verbose: int = None
 
-        self.src_history= []
+        self.src_history = []
         self.action_history = []
 
     def play(self, verbose=0, save_path=None, gamename=None):
@@ -59,7 +62,7 @@ class BricksNBricks:
             if valid_src == "exit":
                 break
             if not valid_src:
-                continue 
+                continue
 
             user_action = input("action (e.g. 'down 7'): ")
             valid_action, direction, action_val = self._parse_action(user_action)
@@ -78,18 +81,24 @@ class BricksNBricks:
             self.src_idx = self.src[0] * self.board.n + self.src[1]
             self.dst_idx = self.dst[0] * self.board.n + self.dst[1]
 
-        assert save_path is not None 
+        assert save_path is not None
         assert gamename is not None
-        history_to_save = pd.DataFrame({"src": self.src_history, "action": self.action_history})
-        history_to_save['src'] = history_to_save['src'].apply(lambda x: json.dumps(x.tolist()))
-        history_to_save['action'] = history_to_save['action'].apply(lambda x: json.dumps(x.tolist()))
+        history_to_save = pd.DataFrame(
+            {"src": self.src_history, "action": self.action_history}
+        )
+        history_to_save["src"] = history_to_save["src"].apply(
+            lambda x: json.dumps(x.tolist())
+        )
+        history_to_save["action"] = history_to_save["action"].apply(
+            lambda x: json.dumps(x.tolist())
+        )
         history_to_save.to_csv(f"{save_path}/history.csv", index=False)
 
     def resume(self, history, verbose=0):
         moves = pd.read_csv(history)
-        moves['src'] = moves['src'].apply(lambda x: np.array(json.loads(x)))
-        moves['action'] = moves['action'].apply(lambda x: np.array(json.loads(x)))
-        
+        moves["src"] = moves["src"].apply(lambda x: np.array(json.loads(x)))
+        moves["action"] = moves["action"].apply(lambda x: np.array(json.loads(x)))
+
         srcs, actions = moves["src"].values, moves["action"].values
         for src, action in zip(srcs, actions):
             # os.system("cls" if os.name == "nt" else "clear")  # Clear the console
@@ -128,7 +137,7 @@ class BricksNBricks:
             # --- Step 2: Check for blanks and contiguous neighbours
             invalid_conditions = [
                 (n_blanks == 0),
-                (n_blanks < np.abs(self.action).sum())
+                (n_blanks < np.abs(self.action).sum()),
             ]
             if any(invalid_conditions):
                 if verbose == 1:
@@ -146,7 +155,6 @@ class BricksNBricks:
                     self._clear_tile([self.board[*self.dst]] + matched)
 
     def is_direct_clear(self, n_blanks, neighbours):
-        
         # sufficient_conditions = [
         #     (n_blanks == 0 and len(neighbours) >= 1),
         #     (n_blanks >= 1 and len(neighbours) <= 1)
@@ -158,22 +166,32 @@ class BricksNBricks:
 
         conditions = [
             (n_blanks == 0 and neighbours[0].label == self.cur_label),
-            (n_blanks >= 1 and len(neighbours) == 0 and self.board[*self.dst].label == self.cur_label),
-            (n_blanks >= 1 and len(neighbours) >= 1 and neighbours[0].label == self.cur_label and np.sum(np.abs(self.action)) == 1)
-
+            (
+                n_blanks >= 1
+                and len(neighbours) == 0
+                and self.board[*self.dst].label == self.cur_label
+            ),
+            (
+                n_blanks >= 1
+                and len(neighbours) >= 1
+                and neighbours[0].label == self.cur_label
+                and np.sum(np.abs(self.action)) == 1
+            ),
         ]
         # TODO: sum of actions == 1
 
         # if any(sufficient_conditions) and all(necessary_conditions):
         #     return True
         if any(conditions):
-            return True 
+            return True
         else:
             return False
 
     def match_tiles(self, coord, temp=False):
         matched = []
-        for direction in [d for d in ["up", "down", "left", "right"] if d != self.direction]:
+        for direction in [
+            d for d in ["up", "down", "left", "right"] if d != self.direction
+        ]:
             cur_tile = self.board[*coord] if not temp else self.temp_board[*coord]
             while type(cur_tile) is not Boundary:
                 cur_tile = cur_tile.get_neighbour(direction)
@@ -186,11 +204,16 @@ class BricksNBricks:
                     continue
 
         if len(matched) >= 2:
-            print("Multiple matched tiles found: " + ", ".join(f"[{tile.row}, {tile.col}]" for tile in matched))
+            print(
+                "Multiple matched tiles found: "
+                + ", ".join(f"[{tile.row}, {tile.col}]" for tile in matched)
+            )
             while True:
                 try:
-                    to_keep = int(input(f"Which tile to remove? index: (0~{len(matched)}): "))
-                    matched= [matched[to_keep]]
+                    to_keep = int(
+                        input(f"Which tile to remove? index: (0~{len(matched)}): ")
+                    )
+                    matched = [matched[to_keep]]
                     break
                 except Exception:
                     continue
@@ -201,7 +224,7 @@ class BricksNBricks:
         if user_src == "e":
             return ("exit", None)
 
-        pattern = r'^[0-9]+\s*,\s*[0-9]+$'
+        pattern = r"^[0-9]+\s*,\s*[0-9]+$"
         if not re.match(pattern, user_src):
             return (False, None)
 
@@ -222,7 +245,7 @@ class BricksNBricks:
         if user_action == "e":
             return ("exit", None, None)
 
-        pattern = r'^(up|down|left|right)\s+([0-9]+)$'
+        pattern = r"^(up|down|left|right)\s+([0-9]+)$"
         match = re.match(pattern, user_action)
         if not match:
             return (False, None, None)
@@ -245,7 +268,7 @@ class BricksNBricks:
             self.board.remove_tile(tile)
             if self.verbose == 1:
                 print(f"Cleared tile at {row}, {col}")
-           
+
         self.src_history.append(self.src)
         self.action_history.append(self.action)
 
@@ -259,7 +282,7 @@ class BricksNBricks:
                 # 1. reached boundary
                 (type(cur_tile) is Boundary),
                 # 2. reached a blocking tile
-                (type(cur_tile) is Tile and n_blanks != 0)
+                (type(cur_tile) is Tile and n_blanks != 0),
             ]
 
             if any(stop):
@@ -293,31 +316,38 @@ class BricksNBricks:
         direction = action / steps
         direction_idx = self.DIRECTIONS_ARRAY.index(direction.tolist())
 
-        return [k for idx, k in enumerate(self.DIRECTIONS_DICT) if idx == direction_idx][0], steps
-
+        return [
+            k for idx, k in enumerate(self.DIRECTIONS_DICT) if idx == direction_idx
+        ][0], steps
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-            description="A minimal replicate of the Bricks'n Bricks game in python."
-        )
+        description="A minimal replicate of the Bricks'n Bricks game in python."
+    )
 
     parser.add_argument(
-            "-p", "--path", type=str, default=None,
-            help="BnB game screenshot."
-        )
+        "-p", "--path", type=str, default=None, help="BnB game screenshot."
+    )
 
     parser.add_argument(
-            "-r", "--resume", action="store_true",
-            )
+        "-r",
+        "--resume",
+        action="store_true",
+    )
     parser.add_argument(
-            "-hi", "--history", type=str, default=None,
-            )
+        "-hi",
+        "--history",
+        type=str,
+        default=None,
+    )
 
     args = parser.parse_args()
     assert args.path is not None
     if args.resume:
-        assert args.history is not None, "Please provide the history file to resume the game."
+        assert (
+            args.history is not None
+        ), "Please provide the history file to resume the game."
 
     gamename = os.path.basename(args.path).split(".")[0]
 
@@ -331,6 +361,7 @@ if __name__ == "__main__":
     os.makedirs(cache_path, exist_ok=True)
 
     import pickle
+
     with open(f"{cache_path}/board.pkl", "wb") as f:
         pickle.dump(board, f)
     with open(f"{cache_path}/clusters.pkl", "wb") as f:
@@ -342,4 +373,4 @@ if __name__ == "__main__":
         game.resume(args.history)
     game.play(verbose=1, save_path=cache_path, gamename=gamename)
     end = time.time()
-    print(end-start)
+    print(end - start)
